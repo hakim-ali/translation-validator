@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { Configuration, OpenAIApi } from 'openai';
+
+import * as XLSX from 'xlsx';
 
 const DEFAULT_TEMPERATURE = 0;
 const DEFAULT_MODEL = 'gpt-3.5-turbo-instruct'; // use any modal who support /v1/completions
@@ -35,9 +37,9 @@ export class TranslationService {
     translatedText: string,
     originalLang: string,
     translatedLang: string,
-  ): Promise<string> {
+  ): Promise<any> {
     try {
-      const prompt = `Original (${originalLang}): ${originalText}\nTranslated (${translatedLang}): ${translatedText}\nEvaluate accuracy and respond in JSON format: {valid: true/false, correct: 'if incorrect, provide correct translation of Original'}`;
+      const prompt = `Original (${originalLang}): ${originalText}\nTranslated (${translatedLang}): ${translatedText}\nEvaluate accuracy and respond in JSON format: {valid: true/false, translated: 'if incorrect, provide correct translation of Original'}`;
       const response = await this.openai.createCompletion({
         model: DEFAULT_MODEL,
         prompt,
@@ -53,10 +55,7 @@ export class TranslationService {
     }
   }
 
-  async translate(
-    originalText: string,
-    translatedLang: string,
-  ): Promise<any> {
+  async translate(originalText: string, translatedLang: string): Promise<any> {
     try {
       const prompt = `Translate  to ${translatedLang}: ${originalText}`;
       const response = await this.openai.createCompletion({
@@ -72,5 +71,31 @@ export class TranslationService {
       console.error('Error translating text:', error);
       throw new Error('Failed to translate.');
     }
+  }
+
+  async processAndValidateTranslations(fileBuffer: Buffer): Promise<Buffer> {
+    const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+    const results = await Promise.all(
+      jsonData.map(async (row: any) => {
+        const { originalText, originalLang, translatedText, translatedLang } =
+          row;
+        const data = await this.validateTranslation(
+          originalText,
+          translatedText,
+          originalLang,
+          translatedLang,
+        );
+        return { ...row, ...data };
+      }),
+    );
+
+    const newSheet = XLSX.utils.json_to_sheet(results);
+    workbook.Sheets[sheetName] = newSheet;
+
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 }
