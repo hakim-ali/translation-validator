@@ -1,6 +1,6 @@
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Translation Validator is a Nest.js application designed to validate and translate text between languages. Built with the robust [Nest](https://github.com/nestjs/nest) framework, this project provides APIs for validating translations and translating text.
 
 ## Installation
 
